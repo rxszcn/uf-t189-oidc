@@ -354,6 +354,7 @@ func GetTokenIDAndSubjectFromToken(
 }
 
 // AuthorizeTokenExchangeClient authorizes a client by validating the client_id and client_secret
+// and that the client is registered for the token exchange grant.
 func AuthorizeTokenExchangeClient(ctx context.Context, clientID, clientSecret string, exchanger Exchanger) (client Client, err error) {
 	ctx, span := Tracer.Start(ctx, "AuthorizeTokenExchangeClient")
 	defer span.End()
@@ -365,6 +366,13 @@ func AuthorizeTokenExchangeClient(ctx context.Context, clientID, clientSecret st
 	client, err = exchanger.Storage().GetClientByClientID(ctx, clientID)
 	if err != nil {
 		return nil, clientAuthError(oidc.ErrInvalidClient(), err)
+	}
+
+	// The same check the op.Server token endpoint applies in withClient
+	// (server_http.go), so that both dispatch paths enforce the client's
+	// registered grant types.
+	if !ValidateGrantType(client, oidc.GrantTypeTokenExchange) {
+		return nil, oidc.ErrUnauthorizedClient().WithDescription("grant_type %q not allowed", oidc.GrantTypeTokenExchange)
 	}
 
 	return client, nil
